@@ -119,7 +119,6 @@ struct JetBackgroundAnalysisTask {
   template <typename TCollisions, typename TJets, typename TTracks>
   void bkgFluctuationsRandomCone(TCollisions const& collision, TJets const& jets, TTracks const& tracks, float centrality)
   {
-    LOGP(info, "WBKGMOD: new jetBackgroundAnalysis code active");
     float randomConeEta = randomNumber.Uniform(trackEtaMin + randomConeR, trackEtaMax - randomConeR);
     float randomConePhi = randomNumber.Uniform(0.0, o2::constants::math::TwoPI);
     float randomConePt = 0;
@@ -149,7 +148,7 @@ struct JetBackgroundAnalysisTask {
 
     // removing the leading jet from the random cone
     const bool hasLead = jets.size() >= 1;
-    const bool hasSub  = jets.size() >= 2;
+    const bool hasSub = jets.size() >= 2;
     float randomConePtWithoutLeadingJet = randomConePt;
     if (hasLead) {
       float dPhiLeadingJet = RecoDecay::constrainAngle(jets.iteratorAt(0).phi() - randomConePhi, static_cast<float>(-o2::constants::math::PI));
@@ -179,17 +178,23 @@ struct JetBackgroundAnalysisTask {
     registry.fill(HIST("h2_centrality_rhorandomconewithoutleadingjet"), centrality, randomConePtWithoutLeadingJet - o2::constants::math::PI * randomConeR * randomConeR * collision.rho());
 
     // randomised eta,phi for tracks, to assess part of fluctuations coming from statistically independently emitted particles, removing tracks from 2 leading jets
-    double randomConePtWithoutOneLeadJet = 0;
-    double randomConePtWithoutTwoLeadJet = 0;
-    for (auto const& track : tracks) {
-      if (jetderiveddatautilities::selectTrack(track, trackSelection)) {
-        float dPhi = RecoDecay::constrainAngle(randomNumber.Uniform(0.0, o2::constants::math::TwoPI) - randomConePhi, static_cast<float>(-o2::constants::math::PI)); // ignores actual phi of track
-        float dEta = randomNumber.Uniform(trackEtaMin, trackEtaMax) - randomConeEta;                                                                                 // ignores actual eta of track
-        if (std::sqrt(dEta * dEta + dPhi * dPhi) < randomConeR) {
-          if (!hasLead || !trackIsInJet(track, jets.iteratorAt(0))) {
-            randomConePtWithoutOneLeadJet += track.pt();
-            if (!hasSub || !trackIsInJet(track, jets.iteratorAt(1))) {
-              randomConePtWithoutTwoLeadJet += track.pt();
+    double randomConePtWithoutOneLeadJet = randomConePtRandomTrackDirection;
+    double randomConePtWithoutTwoLeadJet = randomConePtRandomTrackDirection;
+    if (hasLead) {
+      randomConePtWithoutOneLeadJet = 0.0;
+      randomConePtWithoutTwoLeadJet = 0.0;
+      for (auto const& track : tracks) {
+        if (jetderiveddatautilities::selectTrack(track, trackSelection)) {
+          float dPhi = RecoDecay::constrainAngle(randomNumber.Uniform(0.0, o2::constants::math::TwoPI) - randomConePhi, static_cast<float>(-o2::constants::math::PI)); // ignores actual phi of track
+          float dEta = randomNumber.Uniform(trackEtaMin, trackEtaMax) - randomConeEta;                                                                                 // ignores actual eta of track
+          if (std::sqrt(dEta * dEta + dPhi * dPhi) < randomConeR) {
+            const bool inLead = hasLead && trackIsInJet(track, jets.iteratorAt(0));
+            const bool inSub = hasSub && trackIsInJet(track, jets.iteratorAt(1));
+            if (!inLead) {
+              randomConePtWithoutOneLeadJet += track.pt();
+              if (!hasSub || !inSub) {
+                randomConePtWithoutTwoLeadJet += track.pt();
+              }
             }
           }
         }
